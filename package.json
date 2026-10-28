@@ -4,17 +4,11 @@
   "type": "module",
   "version": "1.0.0",
   "scripts": {
-    "dev": "npx vercel dev",
-    "build": "node ./node_modules/typescript/bin/tsc --noEmit",
-    "typecheck": "node ./node_modules/typescript/bin/tsc --noEmit",
-    "test": "node --test"
-  },
-  "devDependencies": {
-    "@types/node": "^24.0.0",
-    "@vercel/node": "^5.3.0",
-    "typescript": "^5.9.3"
+    "start": "node --disable-warning=ExperimentalWarning server.js",
+    "dev": "node --disable-warning=ExperimentalWarning --watch server.js",
+    "test": "node --disable-warning=ExperimentalWarning --test"
   },
   "dependencies": {
-    "@neondatabase/serverless": "^1.0.2"
+    "tesseract.js": "^6.0.1"
   }
 }

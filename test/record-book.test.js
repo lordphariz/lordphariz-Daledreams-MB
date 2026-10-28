@@ -1,49 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { handleCustomers, handleTransactions } from "../src/lib/record-book.ts";
+import { readFileSync } from "node:fs";
+import { DatabaseSync } from "node:sqlite";
+import { handleCustomers, handleTransactions } from "../src/lib/record-book.js";
 
 function createDatabase() {
-  const customers = [];
-  const transactions = [];
-  let nextId = 1;
-  return {
-    customers,
-    transactions,
-    async query(text, params = []) {
-      if (text.startsWith("SELECT") && text.includes("FROM customers")) return customers.map((row) => ({ ...row }));
-      if (text.startsWith("SELECT") && text.includes("FROM transactions")) return transactions.map((row) => ({ ...row }));
-      if (text.startsWith("INSERT INTO customers")) {
-        const [fullName, phone, measurements, notes] = params;
-        const customer = { id: String(nextId++), fullName, phone, measurements: JSON.parse(measurements), notes };
-        customers.push(customer);
-        return [{ ...customer }];
-      }
-      if (text.startsWith("UPDATE customers")) {
-        const [fullName, phone, measurements, notes, id] = params;
-        const customer = customers.find((item) => item.id === id);
-        if (!customer) return [];
-        Object.assign(customer, { fullName, phone, measurements: JSON.parse(measurements), notes });
-        return [{ ...customer }];
-      }
-      if (text.startsWith("DELETE FROM customers")) {
-        const index = customers.findIndex((item) => item.id === params[0]);
-        if (index < 0) return [];
-        return [customers.splice(index, 1)[0]];
-      }
-      if (text.startsWith("INSERT INTO transactions")) {
-        const [type, customerName, expenseName, amount, date, description, category] = params;
-        const transaction = { id: String(nextId++), type, customerName, expenseName, amount, date, description, category };
-        transactions.push(transaction);
-        return [{ ...transaction }];
-      }
-      if (text.startsWith("DELETE FROM transactions")) {
-        const index = transactions.findIndex((item) => item.id === params[0]);
-        if (index < 0) return [];
-        return [transactions.splice(index, 1)[0]];
-      }
-      throw new Error(`Unexpected SQL query: ${text}`);
-    },
-  };
+  const database = new DatabaseSync(":memory:");
+  database.exec(readFileSync(new URL("../database/schema.sql", import.meta.url), "utf8"));
+  return database;
 }
 
 test("customer records can be created, updated, listed, and deleted", async () => {
@@ -55,18 +19,14 @@ test("customer records can be created, updated, listed, and deleted", async () =
   });
   assert.equal(created.status, 201);
   assert.deepEqual(created.body.measurements, { Chest: "34", Waist: "28", "Cuff width": "9" });
-
-  const listed = await handleCustomers(database, "GET", undefined, undefined);
-  assert.equal(listed.body.length, 1);
-  const id = created.body.id;
-  const updated = await handleCustomers(database, "PUT", id, {
-    fullName: "Amara A. Okafor",
-    phone: "+234 800 123 4567",
-    measurements: { Hips: "38" },
+  assert.equal((await handleCustomers(database, "GET", undefined, undefined)).body.length, 1);
+  const updated = await handleCustomers(database, "PUT", created.body.id, {
+    fullName: "Amara A. Okafor", phone: "+234 800 123 4567", measurements: { Hips: "38" },
   });
   assert.equal(updated.body.fullName, "Amara A. Okafor");
-  assert.equal((await handleCustomers(database, "DELETE", id, undefined)).status, 200);
+  assert.equal((await handleCustomers(database, "DELETE", created.body.id, undefined)).status, 200);
   assert.deepEqual((await handleCustomers(database, "GET", undefined, undefined)).body, []);
+  database.close();
 });
 
 test("income and expense transactions are validated and persisted", async () => {
@@ -80,7 +40,17 @@ test("income and expense transactions are validated and persisted", async () => 
   assert.equal(income.status, 201);
   assert.equal(expense.status, 201);
   assert.deepEqual((await handleTransactions(database, "GET", undefined, undefined)).body.map((item) => item.type), ["income", "expense"]);
+  const updated = await handleTransactions(database, "PUT", income.body.id, {
+    type: "expense", expenseName: "Alteration supplies", amount: 1300, date: "2026-10-29", category: "Accessories",
+  });
+  assert.equal(updated.status, 200);
+  assert.equal(updated.body.type, "expense");
+  assert.equal(updated.body.expenseName, "Alteration supplies");
+  assert.equal((await handleTransactions(database, "PUT", "missing-id", {
+    type: "income", customerName: "Amara Okafor", amount: 100, date: "2026-10-29",
+  })).status, 404);
   assert.equal((await handleTransactions(database, "DELETE", income.body.id, undefined)).status, 200);
+  database.close();
 });
 
 test("invalid inputs are rejected without database writes", async () => {
@@ -89,7 +59,12 @@ test("invalid inputs are rejected without database writes", async () => {
     fullName: "Amara Okafor", phone: "nope", measurements: {},
   });
   assert.equal(customer.status, 400);
-  assert.match(customer.body.error, /valid phone number/i);
+  assert.match(customer.body.error, /5 to 15 digits/i);
+  const shortPhone = await handleCustomers(database, "POST", undefined, {
+    fullName: "Amara Okafor", phone: "5355", measurements: {},
+  });
+  assert.equal(shortPhone.status, 400);
+  assert.match(shortPhone.body.error, /5 to 15 digits/i);
 
   const invalidDate = await handleTransactions(database, "POST", undefined, {
     type: "expense", expenseName: "Fabric", amount: 12, date: "2026-02-31", category: "Fabrics",
@@ -99,12 +74,15 @@ test("invalid inputs are rejected without database writes", async () => {
   });
   assert.equal(invalidDate.status, 400);
   assert.equal(invalidPrecision.status, 400);
-  assert.equal(database.customers.length, 0);
-  assert.equal(database.transactions.length, 0);
+  assert.equal(database.prepare("SELECT COUNT(*) AS count FROM customers").get().count, 0);
+  assert.equal(database.prepare("SELECT COUNT(*) AS count FROM transactions").get().count, 0);
+  database.close();
 });
 
 test("unsupported methods are explicit", async () => {
-  const result = await handleTransactions(createDatabase(), "PUT", undefined, {});
+  const database = createDatabase();
+  const result = await handleTransactions(database, "PATCH", undefined, {});
   assert.equal(result.status, 405);
   assert.equal(result.headers.Allow, "GET, POST");
+  database.close();
 });

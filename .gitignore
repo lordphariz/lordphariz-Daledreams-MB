@@ -1,4 +1,4 @@
 node_modules/
-.vercel/
-.env
-.env.*.local
+data/*.sqlite
+data/*.sqlite-shm
+data/*.sqlite-wal

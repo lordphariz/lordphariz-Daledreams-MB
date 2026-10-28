@@ -1,38 +1,33 @@
 # Daledreams Record Book
 
-A mobile-friendly customer, measurement, and bookkeeping app built for Vercel. The frontend is served from `public/`; API endpoints run as Vercel Functions and store data in PostgreSQL.
+A mobile-friendly customer measurement and bookkeeping app. It runs locally on your computer with a SQLite database stored in this project folder.
 
-## Set up the database
+## Run it
 
-1. Create a PostgreSQL database using the Neon integration in the Vercel Marketplace, or use an existing Neon database.
-2. In the Vercel project settings, add the database connection string as the `DATABASE_URL` environment variable for Development, Preview, and Production.
-3. Run the SQL in [`database/schema.sql`](./database/schema.sql) once in the database's SQL editor.
+1. Install [Node.js 22.13 or newer](https://nodejs.org/) if it is not already installed.
+2. Open this project in VS Code.
+3. Open **Terminal > New Terminal** and run:
 
-## Run locally
+   ```sh
+   npm start
+   ```
+
+4. Open **http://localhost:3000** in your browser.
+
+The first start automatically creates `data/daledreams.sqlite` and its tables. Keep the terminal running while you use the app. Stop the server with `Ctrl+C`; run `npm start` again to continue later. Your data stays in the SQLite file in this project and survives restarts.
+
+## Database
+
+The database is local to this computer and is not uploaded or synchronized. The SQLite schema is in [`database/schema.sql`](./database/schema.sql); the app creates the database and applies the schema automatically when the server starts. Database files are excluded from Git so private customer details are not committed.
+
+## Scanning and backups
+
+When adding or editing a customer, use **Scan paper** to read a clear photo of printed measurement notes. OCR runs in your browser and the photo is not uploaded. The English recognition model is downloaded the first time you scan, so an internet connection is needed for that first scan. Handwriting may not be recognized accurately; review all filled-in measurements before saving.
+
+Use **Download backup** on the dashboard to save a JSON copy of customer and transaction records. Keep backup files in a private location; they contain customer information.
+
+## Check the app
 
 ```sh
-npm install
+npm test
 ```
-
-Link the local Vercel CLI to your Vercel project and pull its environment variables before starting local development:
-
-```sh
-npx vercel link
-npx vercel env pull .env.local
-npm run dev
-```
-
-Alternatively, create `.env.local` with `DATABASE_URL=your-postgres-connection-string`. Do not commit environment files.
-
-## Deploy
-
-Import this repository into Vercel. Vercel serves the static site and deploys the files under `api/` as serverless functions. Add `DATABASE_URL` to the project's environment variables and deploy.
-
-## API
-
-- `GET /api/customers`, `POST /api/customers`
-- `PUT /api/customers/:id`, `DELETE /api/customers/:id`
-- `GET /api/transactions`, `POST /api/transactions`
-- `DELETE /api/transactions/:id`
-
-The API validates incoming data and uses parameterized PostgreSQL queries.
