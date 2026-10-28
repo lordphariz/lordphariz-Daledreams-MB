@@ -4,12 +4,72 @@ const dateFormat = new Intl.DateTimeFormat("en-NG", { day: "numeric", month: "sh
 const $ = (selector, root = document) => root.querySelector(selector);
 const escapeHtml = (value = "") => String(value).replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
 const today = () => new Date().toISOString().slice(0, 10);
+const localPreview = window.location.protocol === "file:";
+const localStorageKey = "daledreams-record-book";
+
+function localRecords() {
+  const saved = localStorage.getItem(localStorageKey);
+  if (!saved) return { customers: [], transactions: [] };
+  const records = JSON.parse(saved);
+  if (!Array.isArray(records.customers) || !Array.isArray(records.transactions)) {
+    throw new Error("Saved local records are invalid. Clear this site's browser data to start fresh.");
+  }
+  return records;
+}
+
+function saveLocalRecords(records) {
+  localStorage.setItem(localStorageKey, JSON.stringify(records));
+}
+
+function localApi(path, options) {
+  const records = localRecords();
+  const segments = path.split("/").filter(Boolean);
+  const [resource, id] = segments;
+  const method = options.method || "GET";
+  const body = options.body ? JSON.parse(options.body) : {};
+  let result;
+
+  if (resource === "customers") {
+    if (method === "GET" && !id) result = records.customers;
+    else if (method === "POST" && !id) {
+      result = { id: crypto.randomUUID(), ...body, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+      records.customers.push(result);
+    } else if (method === "PUT" && id) {
+      const index = records.customers.findIndex((customer) => customer.id === id);
+      if (index < 0) return Response.json({ error: "Customer not found." }, { status: 404 });
+      result = { ...records.customers[index], ...body, updatedAt: new Date().toISOString() };
+      records.customers[index] = result;
+    } else if (method === "DELETE" && id) {
+      const count = records.customers.length;
+      records.customers = records.customers.filter((customer) => customer.id !== id);
+      if (records.customers.length === count) return Response.json({ error: "Customer not found." }, { status: 404 });
+      result = { ok: true };
+    }
+  } else if (resource === "transactions") {
+    if (method === "GET" && !id) result = records.transactions;
+    else if (method === "POST" && !id) {
+      result = { id: crypto.randomUUID(), ...body, createdAt: new Date().toISOString() };
+      records.transactions.push(result);
+    } else if (method === "DELETE" && id) {
+      const count = records.transactions.length;
+      records.transactions = records.transactions.filter((transaction) => transaction.id !== id);
+      if (records.transactions.length === count) return Response.json({ error: "Transaction not found." }, { status: 404 });
+      result = { ok: true };
+    }
+  }
+
+  if (result === undefined) return Response.json({ error: "API route not found." }, { status: 404 });
+  if (method !== "GET") saveLocalRecords(records);
+  return Response.json(result, { status: method === "POST" ? 201 : 200 });
+}
 
 async function api(path, options = {}) {
-  const response = await fetch(`/api${path}`, {
-    ...options,
-    headers: { "Content-Type": "application/json", ...options.headers },
-  });
+  const response = localPreview
+    ? localApi(path, options)
+    : await fetch(`/api${path}`, {
+      ...options,
+      headers: { "Content-Type": "application/json", ...options.headers },
+    });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(payload.error || `Request failed (${response.status})`);
   return payload;
@@ -42,10 +102,11 @@ async function refreshData() {
     const [customers, transactions] = await Promise.all([api("/customers"), api("/transactions")]);
     state.customers = customers;
     state.transactions = transactions;
-    hideNotice();
+    if (localPreview) showNotice("Local preview: records are saved in this browser only. Deploy to Vercel to use your database.");
+    else hideNotice();
     render();
   } catch (error) {
-    showNotice(`Could not load your record book: ${error.message}. Check the D1 database and Cloudflare Access settings, then try again.`);
+    showNotice(`Could not load your record book: ${error.message}. Check your database connection and try again.`);
   }
 }
 
@@ -121,7 +182,7 @@ function renderChart() {
 function setView(view) {
   state.view = view;
   document.querySelectorAll(".view-panel").forEach((panel) => panel.classList.toggle("active", panel.id === `view-${view}`));
-  document.querySelectorAll(".nav-item").forEach((item) => item.classList.toggle("active", item.dataset.view === view));
+  document.querySelectorAll(".nav-item, .mobile-nav-item").forEach((item) => item.classList.toggle("active", item.dataset.view === view));
   $("#breadcrumb-current").textContent = view === "dashboard" ? "Overview" : view === "customers" ? "Customers" : "Transactions";
   $("#sidebar").classList.remove("open");
 }

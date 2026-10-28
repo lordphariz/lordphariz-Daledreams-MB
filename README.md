@@ -1,60 +1,38 @@
 # Daledreams Record Book
 
-A mobile-friendly customer, measurement, and bookkeeping app served by a Cloudflare Worker and persisted in Cloudflare D1.
+A mobile-friendly customer, measurement, and bookkeeping app built for Vercel. The frontend is served from `public/`; API endpoints run as Vercel Functions and store data in PostgreSQL.
 
-## Requirements
+## Set up the database
 
-- Node.js and npm
-- A Cloudflare account with Workers and D1 enabled
+1. Create a PostgreSQL database using the Neon integration in the Vercel Marketplace, or use an existing Neon database.
+2. In the Vercel project settings, add the database connection string as the `DATABASE_URL` environment variable for Development, Preview, and Production.
+3. Run the SQL in [`database/schema.sql`](./database/schema.sql) once in the database's SQL editor.
 
-## Create and configure D1
-
-Install the project dependencies:
+## Run locally
 
 ```sh
 npm install
 ```
 
-Authenticate Wrangler and create the database:
+Link the local Vercel CLI to your Vercel project and pull its environment variables before starting local development:
 
 ```sh
-npm exec wrangler login
-```
-
-```sh
-npm run d1:create
-```
-
-Copy the returned database ID into `database_id` in `wrangler.toml`.
-
-Apply the initial schema locally and remotely:
-
-```sh
-npm run d1:migrate:local
-npm run d1:migrate:remote
-```
-
-## Run and deploy
-
-Deploy once to create the Worker, then add a custom domain to it in Cloudflare. Protect that hostname with a Cloudflare Access self-hosted application. Copy the Access team domain and the app's AUD tag into `ACCESS_TEAM_DOMAIN` and `ACCESS_AUD` in `wrangler.toml`, then deploy again. Until configured, the Worker fails closed and the API returns `503`. The Worker verifies the Access JWT signature, issuer, audience, and expiry for every API request, so the `workers.dev` URL cannot bypass API authentication. Disable the `workers.dev` route too if you want the static app itself to be private. Local Wrangler requests on localhost are allowed for development.
-
-```sh
+npx vercel link
+npx vercel env pull .env.local
 npm run dev
 ```
 
-Open the local URL Wrangler prints. To publish the app and API:
+Alternatively, create `.env.local` with `DATABASE_URL=your-postgres-connection-string`. Do not commit environment files.
 
-```sh
-npm run deploy
-```
+## Deploy
 
-The Worker serves the static app and the `/api` endpoints on the same origin. Customer and transaction data are stored in the bound D1 database; no browser-only or in-memory persistence is used.
+Import this repository into Vercel. Vercel serves the static site and deploys the files under `api/` as serverless functions. Add `DATABASE_URL` to the project's environment variables and deploy.
 
-## Data API
+## API
 
 - `GET /api/customers`, `POST /api/customers`
 - `PUT /api/customers/:id`, `DELETE /api/customers/:id`
 - `GET /api/transactions`, `POST /api/transactions`
 - `DELETE /api/transactions/:id`
 
-The API validates input, uses parameterized D1 queries, and returns JSON errors for invalid or failed requests.
+The API validates incoming data and uses parameterized PostgreSQL queries.

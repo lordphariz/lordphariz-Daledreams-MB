@@ -1,26 +1,26 @@
 CREATE TABLE IF NOT EXISTS customers (
-  id TEXT PRIMARY KEY NOT NULL,
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   full_name TEXT NOT NULL CHECK (length(full_name) BETWEEN 1 AND 120),
   phone TEXT NOT NULL CHECK (length(phone) BETWEEN 5 AND 40),
-  measurements TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(measurements)),
+  measurements JSONB NOT NULL DEFAULT '{}'::jsonb CHECK (jsonb_typeof(measurements) = 'object'),
   notes TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS customers_name_idx ON customers(full_name COLLATE NOCASE);
+CREATE INDEX IF NOT EXISTS customers_name_idx ON customers(full_name);
 CREATE INDEX IF NOT EXISTS customers_phone_idx ON customers(phone);
 
 CREATE TABLE IF NOT EXISTS transactions (
-  id TEXT PRIMARY KEY NOT NULL,
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   type TEXT NOT NULL CHECK (type IN ('income', 'expense')),
   customer_name TEXT,
   expense_name TEXT,
-  amount REAL NOT NULL CHECK (amount > 0),
-  date TEXT NOT NULL CHECK (date GLOB '????-??-??'),
+  amount NUMERIC(15, 2) NOT NULL CHECK (amount > 0),
+  date DATE NOT NULL,
   description TEXT NOT NULL DEFAULT '',
   category TEXT CHECK (category IS NULL OR category IN ('Fabrics', 'Accessories', 'Transport', 'Equipment', 'Utilities', 'Rent', 'Other')),
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   CHECK (
     (type = 'income' AND customer_name IS NOT NULL AND expense_name IS NULL AND category IS NULL)
     OR

@@ -4,18 +4,17 @@
   "type": "module",
   "version": "1.0.0",
   "scripts": {
-    "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
-    "types": "wrangler types",
-    "typecheck": "tsc --noEmit",
-    "test": "node --test",
-    "d1:create": "wrangler d1 create daledreams-record-book",
-    "d1:migrate:local": "wrangler d1 migrations apply daledreams-record-book --local",
-    "d1:migrate:remote": "wrangler d1 migrations apply daledreams-record-book --remote"
+    "dev": "npx vercel dev",
+    "build": "node ./node_modules/typescript/bin/tsc --noEmit",
+    "typecheck": "node ./node_modules/typescript/bin/tsc --noEmit",
+    "test": "node --test"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^5.20261028.1",
-    "typescript": "^5.9.3",
-    "wrangler": "^4.0.0"
+    "@types/node": "^24.0.0",
+    "@vercel/node": "^5.3.0",
+    "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "@neondatabase/serverless": "^1.0.2"
   }
 }
